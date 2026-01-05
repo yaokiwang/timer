@@ -48,15 +48,16 @@
             position: relative;
         }
 
-        /* 提示訊息 */
+        /* 提示訊息：只在 iOS 出現，提醒關閉靜音 */
         .ios-warning {
             color: #ff9800;
             font-size: 0.8rem;
             margin-bottom: 10px;
             background: rgba(255, 152, 0, 0.1);
-            padding: 5px;
-            border-radius: 5px;
+            padding: 8px;
+            border-radius: 8px;
             display: none; 
+            line-height: 1.4;
         }
 
         .top-bar {
@@ -76,7 +77,7 @@
         }
 
         .display-area {
-            height: 220px; /* 稍微縮小高度 */
+            height: 220px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -181,29 +182,12 @@
             display: none !important;
         }
 
-        /* 除錯區塊 */
-        #debugLog {
-            margin-top: 20px;
-            padding: 10px;
-            background: #000;
-            color: #0f0;
-            font-family: monospace;
-            font-size: 0.7rem;
-            text-align: left;
-            height: 80px;
-            overflow-y: scroll;
-            border: 1px solid #333;
-            width: 90%;
-            border-radius: 5px;
-            opacity: 0.8;
-        }
-
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div id="iosWarning" class="ios-warning">請確認手機「靜音開關」已關閉 (不可顯示橘色)</div>
+    <div id="iosWarning" class="ios-warning">⚠️ 請確認手機側邊「靜音開關」已關閉，並開啟鈴聲音量，否則語音無法播放。</div>
 
     <div class="top-bar">
         <button class="mode-btn" onclick="toggleDisplayMode()">切換顯示：數字鐘 / 視覺鐘</button>
@@ -245,22 +229,11 @@
     </div>
 </div>
 
-<div id="debugLog">系統準備就緒...</div>
-
 <script>
-    // === 工具：寫入除錯紀錄 ===
-    function log(msg) {
-        const logEl = document.getElementById('debugLog');
-        const time = new Date().toLocaleTimeString();
-        logEl.innerHTML = `[${time}] ${msg}<br>` + logEl.innerHTML;
-        console.log(msg);
-    }
-
     // === iOS 偵測 ===
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     if (isIOS) {
         document.getElementById('iosWarning').style.display = 'block';
-        log("偵測到 iOS 裝置");
     }
 
     // === 變數初始化 ===
@@ -269,7 +242,7 @@
     let timerInterval = null;
     let isRunning = false;
     let isVisualMode = false;
-    let audioContext = null; // 用來強制開啟音效通道
+    let audioContext = null;
 
     const digitalDisplay = document.getElementById('digitalDisplay');
     const visualCanvas = document.getElementById('visualCanvas');
@@ -287,35 +260,28 @@
     function loadVoices() {
         if ('speechSynthesis' in window) {
             voices = window.speechSynthesis.getVoices();
-            log(`語音包載入完成，數量: ${voices.length}`);
-        } else {
-            log("錯誤：此瀏覽器不支援語音合成");
         }
     }
 
     if ('speechSynthesis' in window) {
         window.speechSynthesis.onvoiceschanged = loadVoices;
-        // 嘗試初次載入
         loadVoices();
     }
 
-    // === 強制解鎖 iOS 音效通道 (Web Audio API) ===
+    // === 強制解鎖 iOS 音效通道 (關鍵修復) ===
     function unlockAudioContext() {
         if (!audioContext) {
-            // 建立音訊環境
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
         
         if (audioContext.state === 'suspended') {
-            audioContext.resume().then(() => {
-                log("音訊通道已喚醒 (Resume)");
-            });
+            audioContext.resume();
         }
 
-        // 播放一個極短的無聲震盪波，騙過 iOS
+        // 播放極短無聲波
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
-        gainNode.gain.value = 0.01; // 極小音量，幾乎聽不到
+        gainNode.gain.value = 0.01; 
         oscillator.connect(gainNode);
         gainNode.connect(audioContext.destination);
         oscillator.type = 'sine';
@@ -323,7 +289,6 @@
         oscillator.start();
         setTimeout(() => {
             oscillator.stop();
-            log("靜音解鎖訊號已發送");
         }, 100);
     }
 
@@ -417,17 +382,14 @@
             startBtn.innerText = "繼續";
             startBtn.style.backgroundColor = "#ff9800";
             window.speechSynthesis.cancel(); 
-            log("計時暫停");
         } else {
             // 開始
             if (totalSeconds <= 0) return;
             
-            log(">>> 按下開始");
-            
-            // 1. 強制解鎖 Web Audio (發送無聲波)
+            // 1. 強制解鎖 Web Audio
             unlockAudioContext();
 
-            // 2. 觸發語音 (如果有勾選)
+            // 2. 觸發語音
             if (voiceToggle.checked) {
                 window.speechSynthesis.cancel();
                 speak("開始計時"); 
@@ -460,7 +422,6 @@
         startBtn.innerText = "開始";
         startBtn.style.backgroundColor = "var(--accent-color)";
         window.speechSynthesis.cancel();
-        log("計時重設");
     }
 
     function timeUp() {
@@ -471,7 +432,6 @@
         speak("時間到");
         rawInput = "";
         drawVisualClock(0);
-        log("時間到");
     }
 
     function checkVoiceAnnouncement(secondsRemaining) {
@@ -483,11 +443,9 @@
 
             if (intervalSetting === "1") {
                 speak(`還剩下 ${minutesRemaining} 分鐘`);
-                log(`報時: ${minutesRemaining} 分鐘`);
             } else if (intervalSetting === "5") {
                 if (minutesRemaining % 5 === 0) {
                     speak(`還剩下 ${minutesRemaining} 分鐘`);
-                    log(`報時: ${minutesRemaining} 分鐘`);
                 }
             }
         }
@@ -495,29 +453,21 @@
 
     // === 語音說話核心函式 ===
     function speak(text) {
-        if (!('speechSynthesis' in window)) {
-            log("瀏覽器不支援語音");
-            return;
-        }
+        if (!('speechSynthesis' in window)) return;
 
         const utterance = new SpeechSynthesisUtterance(text);
         
-        // 嘗試尋找中文語音
         if (voices.length === 0) voices = window.speechSynthesis.getVoices();
         const zhVoice = voices.find(v => v.lang.includes('zh') || v.lang.includes('TW'));
         if (zhVoice) {
             utterance.voice = zhVoice;
             utterance.lang = zhVoice.lang;
         } else {
-            utterance.lang = 'zh-TW'; // Fallback
+            utterance.lang = 'zh-TW';
         }
         
         utterance.rate = 1;
-        utterance.volume = 1; // 確保音量最大
-
-        // 監聽語音事件
-        utterance.onstart = () => log(`正在讀: "${text}"`);
-        utterance.onerror = (e) => log(`語音錯誤: ${e.error}`);
+        utterance.volume = 1;
 
         window.speechSynthesis.speak(utterance);
     }
