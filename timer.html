@@ -16,7 +16,6 @@
         :root {
             --bg-color: #1a1a1a;
             --text-color: #ffffff;
-            /* 這裡設定原本的綠色 */
             --accent-color: #4CAF50; 
             --btn-bg: #333;
             --btn-hover: #444;
@@ -46,6 +45,7 @@
             text-align: center;
             width: 90%;
             max-width: 350px;
+            position: relative;
         }
 
         /* 提示訊息 */
@@ -60,23 +60,23 @@
         }
 
         .top-bar {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             border-bottom: 1px solid #444;
             padding-bottom: 10px;
         }
         
         .mode-btn {
-            background-color: #007AFF; /* iOS 藍色按鈕 */
+            background-color: #007AFF;
             color: white;
-            padding: 10px 20px;
+            padding: 10px 15px;
             border-radius: 12px;
-            font-size: 1rem;
+            font-size: 0.9rem;
             width: 100%;
             border: none;
         }
 
         .display-area {
-            height: 250px;
+            height: 220px; /* 稍微縮小高度 */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -85,12 +85,10 @@
 
         /* 數字時間顯示區 - 強制綠色 */
         .timer-display {
-            font-size: 5.5rem;
+            font-size: 5rem;
             font-weight: bold;
             font-variant-numeric: tabular-nums;
-            /* 確保顏色為綠色 */
             color: #4CAF50 !important; 
-            /* 綠色發光效果 */
             text-shadow: 0 0 20px rgba(76, 175, 80, 0.6); 
             line-height: 1;
         }
@@ -104,13 +102,13 @@
             display: grid;
             grid-template-columns: repeat(5, 1fr);
             gap: 8px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
 
         button {
             border: none;
-            border-radius: 10px;
-            padding: 15px 0;
+            border-radius: 8px;
+            padding: 12px 0;
             font-size: 1.2rem;
             cursor: pointer;
             transition: all 0.1s;
@@ -133,11 +131,10 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 12px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
 
         .btn-start {
-            /* 開始按鈕也是綠色 */
             background-color: var(--accent-color); 
             font-weight: bold;
             font-size: 1.2rem;
@@ -184,12 +181,29 @@
             display: none !important;
         }
 
+        /* 除錯區塊 */
+        #debugLog {
+            margin-top: 20px;
+            padding: 10px;
+            background: #000;
+            color: #0f0;
+            font-family: monospace;
+            font-size: 0.7rem;
+            text-align: left;
+            height: 80px;
+            overflow-y: scroll;
+            border: 1px solid #333;
+            width: 90%;
+            border-radius: 5px;
+            opacity: 0.8;
+        }
+
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div id="iosWarning" class="ios-warning">請關閉 iPhone 側邊靜音模式 (開啟鈴聲)，否則語音無法播放。</div>
+    <div id="iosWarning" class="ios-warning">請確認手機「靜音開關」已關閉 (不可顯示橘色)</div>
 
     <div class="top-bar">
         <button class="mode-btn" onclick="toggleDisplayMode()">切換顯示：數字鐘 / 視覺鐘</button>
@@ -231,37 +245,91 @@
     </div>
 </div>
 
+<div id="debugLog">系統準備就緒...</div>
+
 <script>
+    // === 工具：寫入除錯紀錄 ===
+    function log(msg) {
+        const logEl = document.getElementById('debugLog');
+        const time = new Date().toLocaleTimeString();
+        logEl.innerHTML = `[${time}] ${msg}<br>` + logEl.innerHTML;
+        console.log(msg);
+    }
+
+    // === iOS 偵測 ===
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     if (isIOS) {
         document.getElementById('iosWarning').style.display = 'block';
+        log("偵測到 iOS 裝置");
     }
 
+    // === 變數初始化 ===
     let rawInput = "";
     let totalSeconds = 0;
     let timerInterval = null;
     let isRunning = false;
     let isVisualMode = false;
+    let audioContext = null; // 用來強制開啟音效通道
 
     const digitalDisplay = document.getElementById('digitalDisplay');
     const visualCanvas = document.getElementById('visualCanvas');
     const startBtn = document.getElementById('startBtn');
     const voiceToggle = document.getElementById('voiceToggle');
     
+    // Canvas 設定
     const ctx = visualCanvas.getContext('2d');
     const centerX = visualCanvas.width / 2;
     const centerY = visualCanvas.height / 2;
     const radius = 130;
 
+    // === 語音初始化 ===
     let voices = [];
-    if ('speechSynthesis' in window) {
-        window.speechSynthesis.onvoiceschanged = () => {
+    function loadVoices() {
+        if ('speechSynthesis' in window) {
             voices = window.speechSynthesis.getVoices();
-        };
+            log(`語音包載入完成，數量: ${voices.length}`);
+        } else {
+            log("錯誤：此瀏覽器不支援語音合成");
+        }
+    }
+
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+        // 嘗試初次載入
+        loadVoices();
+    }
+
+    // === 強制解鎖 iOS 音效通道 (Web Audio API) ===
+    function unlockAudioContext() {
+        if (!audioContext) {
+            // 建立音訊環境
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        if (audioContext.state === 'suspended') {
+            audioContext.resume().then(() => {
+                log("音訊通道已喚醒 (Resume)");
+            });
+        }
+
+        // 播放一個極短的無聲震盪波，騙過 iOS
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        gainNode.gain.value = 0.01; // 極小音量，幾乎聽不到
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 440; 
+        oscillator.start();
+        setTimeout(() => {
+            oscillator.stop();
+            log("靜音解鎖訊號已發送");
+        }, 100);
     }
 
     drawVisualClock(0);
 
+    // === 顯示模式切換 ===
     function toggleDisplayMode() {
         isVisualMode = !isVisualMode;
         if (isVisualMode) {
@@ -274,9 +342,9 @@
         }
     }
 
+    // === 視覺鐘繪製 ===
     function drawVisualClock(seconds) {
         ctx.clearRect(0, 0, visualCanvas.width, visualCanvas.height);
-
         ctx.beginPath();
         ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
         ctx.fillStyle = "#ffffff";
@@ -301,10 +369,8 @@
         }
 
         if (seconds <= 0) return;
-
         let percentage = seconds / 3600; 
         if (percentage > 1) percentage = 1;
-
         const startAngle = -0.5 * Math.PI;
         const endAngle = startAngle + (percentage * 2 * Math.PI);
 
@@ -316,6 +382,7 @@
         ctx.fill();
     }
 
+    // === 數字輸入 ===
     function addNumber(num) {
         if (isRunning) return;
         if (rawInput.length >= 4) return;
@@ -339,18 +406,28 @@
         return `${m}:${s}`;
     }
 
+    // === 計時控制 ===
     function toggleTimer() {
         if (totalSeconds <= 0 && rawInput === "") return;
 
         if (isRunning) {
+            // 暫停
             clearInterval(timerInterval);
             isRunning = false;
             startBtn.innerText = "繼續";
             startBtn.style.backgroundColor = "#ff9800";
             window.speechSynthesis.cancel(); 
+            log("計時暫停");
         } else {
+            // 開始
             if (totalSeconds <= 0) return;
             
+            log(">>> 按下開始");
+            
+            // 1. 強制解鎖 Web Audio (發送無聲波)
+            unlockAudioContext();
+
+            // 2. 觸發語音 (如果有勾選)
             if (voiceToggle.checked) {
                 window.speechSynthesis.cancel();
                 speak("開始計時"); 
@@ -383,6 +460,7 @@
         startBtn.innerText = "開始";
         startBtn.style.backgroundColor = "var(--accent-color)";
         window.speechSynthesis.cancel();
+        log("計時重設");
     }
 
     function timeUp() {
@@ -393,6 +471,7 @@
         speak("時間到");
         rawInput = "";
         drawVisualClock(0);
+        log("時間到");
     }
 
     function checkVoiceAnnouncement(secondsRemaining) {
@@ -404,27 +483,43 @@
 
             if (intervalSetting === "1") {
                 speak(`還剩下 ${minutesRemaining} 分鐘`);
+                log(`報時: ${minutesRemaining} 分鐘`);
             } else if (intervalSetting === "5") {
                 if (minutesRemaining % 5 === 0) {
                     speak(`還剩下 ${minutesRemaining} 分鐘`);
+                    log(`報時: ${minutesRemaining} 分鐘`);
                 }
             }
         }
     }
 
+    // === 語音說話核心函式 ===
     function speak(text) {
-        if ('speechSynthesis' in window) {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'zh-TW'; 
-            utterance.rate = 1;
-            
-            const zhVoices = voices.filter(v => v.lang.includes('zh') || v.lang.includes('TW') || v.lang.includes('HK'));
-            if (zhVoices.length > 0) {
-                utterance.voice = zhVoices[0]; 
-            }
-
-            window.speechSynthesis.speak(utterance);
+        if (!('speechSynthesis' in window)) {
+            log("瀏覽器不支援語音");
+            return;
         }
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // 嘗試尋找中文語音
+        if (voices.length === 0) voices = window.speechSynthesis.getVoices();
+        const zhVoice = voices.find(v => v.lang.includes('zh') || v.lang.includes('TW'));
+        if (zhVoice) {
+            utterance.voice = zhVoice;
+            utterance.lang = zhVoice.lang;
+        } else {
+            utterance.lang = 'zh-TW'; // Fallback
+        }
+        
+        utterance.rate = 1;
+        utterance.volume = 1; // 確保音量最大
+
+        // 監聽語音事件
+        utterance.onstart = () => log(`正在讀: "${text}"`);
+        utterance.onerror = (e) => log(`語音錯誤: ${e.error}`);
+
+        window.speechSynthesis.speak(utterance);
     }
 </script>
 
