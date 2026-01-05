@@ -2,20 +2,29 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>視覺與語音倒數計時器</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <title>語音計時器</title>
+    
+    <link rel="apple-touch-icon" href="https://img.icons8.com/color/180/000000/stopwatch.png">
+    
     <style>
+        touch-action: manipulation;
+        
         :root {
             --bg-color: #1a1a1a;
             --text-color: #ffffff;
-            --accent-color: #4CAF50;
+            /* 這裡設定原本的綠色 */
+            --accent-color: #4CAF50; 
             --btn-bg: #333;
             --btn-hover: #444;
             --visual-clock-red: #ff3b30;
         }
 
         body {
-            font-family: 'Helvetica Neue', Arial, 'Heiti TC', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
             display: flex;
@@ -24,6 +33,9 @@
             justify-content: center;
             min-height: 100vh;
             margin: 0;
+            overscroll-behavior: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         .container {
@@ -32,10 +44,21 @@
             border-radius: 20px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
             text-align: center;
-            width: 350px; /*稍微加寬以容納5個按鈕*/
+            width: 90%;
+            max-width: 350px;
         }
 
-        /* 頂部切換按鈕 */
+        /* 提示訊息 */
+        .ios-warning {
+            color: #ff9800;
+            font-size: 0.8rem;
+            margin-bottom: 10px;
+            background: rgba(255, 152, 0, 0.1);
+            padding: 5px;
+            border-radius: 5px;
+            display: none; 
+        }
+
         .top-bar {
             margin-bottom: 20px;
             border-bottom: 1px solid #444;
@@ -43,40 +66,40 @@
         }
         
         .mode-btn {
-            background-color: #2196F3;
+            background-color: #007AFF; /* iOS 藍色按鈕 */
             color: white;
-            padding: 8px 20px;
-            border-radius: 20px;
-            font-size: 0.9rem;
+            padding: 10px 20px;
+            border-radius: 12px;
+            font-size: 1rem;
             width: 100%;
+            border: none;
         }
 
-        /* 顯示區域容器 */
         .display-area {
-            height: 250px; /* 固定高度避免切換時跳動 */
+            height: 250px;
             display: flex;
             align-items: center;
             justify-content: center;
             margin-bottom: 10px;
         }
 
-        /* 數字時間顯示區 (極大化) */
+        /* 數字時間顯示區 - 強制綠色 */
         .timer-display {
-            font-size: 6rem; /* 字體加大 */
+            font-size: 5.5rem;
             font-weight: bold;
             font-variant-numeric: tabular-nums;
-            color: var(--accent-color);
-            text-shadow: 0 0 15px rgba(76, 175, 80, 0.4);
+            /* 確保顏色為綠色 */
+            color: #4CAF50 !important; 
+            /* 綠色發光效果 */
+            text-shadow: 0 0 20px rgba(76, 175, 80, 0.6); 
             line-height: 1;
         }
 
-        /* 視覺鐘 Canvas */
         canvas {
             max-width: 100%;
             max-height: 100%;
         }
 
-        /* 按鈕網格：一排5個，共2排 */
         .numpad {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
@@ -86,62 +109,60 @@
 
         button {
             border: none;
-            border-radius: 8px;
-            padding: 10px 5px; /* 按鈕縮小，減少內距 */
-            font-size: 1rem;   /* 字體縮小 */
+            border-radius: 10px;
+            padding: 15px 0;
+            font-size: 1.2rem;
             cursor: pointer;
             transition: all 0.1s;
             background-color: var(--btn-bg);
             color: white;
+            touch-action: manipulation;
         }
 
         button:active {
+            background-color: #666;
             transform: scale(0.95);
-        }
-
-        button:hover {
-            background-color: var(--btn-hover);
         }
 
         .num-btn {
             font-weight: bold;
             font-family: monospace;
-            font-size: 1.1rem;
         }
 
-        /* 控制鍵樣式 */
         .control-group {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 10px;
+            gap: 12px;
             margin-bottom: 20px;
         }
 
         .btn-start {
-            background-color: var(--accent-color);
+            /* 開始按鈕也是綠色 */
+            background-color: var(--accent-color); 
             font-weight: bold;
             font-size: 1.2rem;
-            padding: 12px;
+            padding: 15px;
+            border-radius: 12px;
         }
 
         .btn-reset {
-            background-color: #f44336;
+            background-color: #ff3b30;
             font-weight: bold;
             font-size: 1.2rem;
-            padding: 12px;
+            padding: 15px;
+            border-radius: 12px;
         }
 
-        /* 設定區樣式 */
         .settings {
             border-top: 1px solid #444;
             padding-top: 15px;
             text-align: left;
-            font-size: 0.85rem;
+            font-size: 1rem;
             color: #ccc;
         }
 
         .setting-row {
-            margin-bottom: 8px;
+            margin-bottom: 12px;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -150,11 +171,15 @@
         .radio-group {
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 10px;
             margin-top: 8px;
         }
+        
+        input[type="radio"], input[type="checkbox"] {
+            transform: scale(1.3);
+            margin-right: 10px;
+        }
 
-        /* 工具類別：隱藏元素 */
         .hidden {
             display: none !important;
         }
@@ -164,6 +189,8 @@
 <body>
 
 <div class="container">
+    <div id="iosWarning" class="ios-warning">請關閉 iPhone 側邊靜音模式 (開啟鈴聲)，否則語音無法播放。</div>
+
     <div class="top-bar">
         <button class="mode-btn" onclick="toggleDisplayMode()">切換顯示：數字鐘 / 視覺鐘</button>
     </div>
@@ -179,7 +206,6 @@
         <button class="num-btn" onclick="addNumber(3)">3</button>
         <button class="num-btn" onclick="addNumber(4)">4</button>
         <button class="num-btn" onclick="addNumber(5)">5</button>
-        
         <button class="num-btn" onclick="addNumber(6)">6</button>
         <button class="num-btn" onclick="addNumber(7)">7</button>
         <button class="num-btn" onclick="addNumber(8)">8</button>
@@ -206,45 +232,51 @@
 </div>
 
 <script>
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    if (isIOS) {
+        document.getElementById('iosWarning').style.display = 'block';
+    }
+
     let rawInput = "";
     let totalSeconds = 0;
     let timerInterval = null;
     let isRunning = false;
-    let isVisualMode = false; // 追蹤目前模式
+    let isVisualMode = false;
 
     const digitalDisplay = document.getElementById('digitalDisplay');
     const visualCanvas = document.getElementById('visualCanvas');
     const startBtn = document.getElementById('startBtn');
     const voiceToggle = document.getElementById('voiceToggle');
     
-    // Canvas 設定
     const ctx = visualCanvas.getContext('2d');
     const centerX = visualCanvas.width / 2;
     const centerY = visualCanvas.height / 2;
-    const radius = 130; // 圓的半徑
+    const radius = 130;
 
-    // 初始化視覺鐘
+    let voices = [];
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = () => {
+            voices = window.speechSynthesis.getVoices();
+        };
+    }
+
     drawVisualClock(0);
 
-    // 切換顯示模式
     function toggleDisplayMode() {
         isVisualMode = !isVisualMode;
         if (isVisualMode) {
             digitalDisplay.classList.add('hidden');
             visualCanvas.classList.remove('hidden');
-            drawVisualClock(totalSeconds); // 切換時立即重繪
+            drawVisualClock(totalSeconds);
         } else {
             digitalDisplay.classList.remove('hidden');
             visualCanvas.classList.add('hidden');
         }
     }
 
-    // 繪製視覺鐘的核心邏輯
     function drawVisualClock(seconds) {
-        // 清空畫布
         ctx.clearRect(0, 0, visualCanvas.width, visualCanvas.height);
 
-        // 1. 畫背景圓盤 (白色底)
         ctx.beginPath();
         ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
         ctx.fillStyle = "#ffffff";
@@ -253,7 +285,6 @@
         ctx.strokeStyle = "#999";
         ctx.stroke();
 
-        // 2. 畫刻度 (選用，增加時鐘感)
         for (let i = 0; i < 12; i++) {
             const angle = (i * 30) * Math.PI / 180;
             const startR = radius - 10;
@@ -269,35 +300,26 @@
             ctx.stroke();
         }
 
-        // 如果沒有時間，就不畫紅色扇形
         if (seconds <= 0) return;
 
-        // 計算角度
-        // 1分鐘 = 6度。 60分鐘 = 360度。
-        // 公式： (秒數 / 3600) * 2PI
-        // 注意：HTML5 Canvas 0度是3點鐘方向。我們要從12點鐘(-90度)開始畫。
-        
         let percentage = seconds / 3600; 
-        if (percentage > 1) percentage = 1; // 超過60分就畫滿圓
+        if (percentage > 1) percentage = 1;
 
-        const startAngle = -0.5 * Math.PI; // 12點鐘方向
-        const endAngle = startAngle + (percentage * 2 * Math.PI); // 順時針畫
+        const startAngle = -0.5 * Math.PI;
+        const endAngle = startAngle + (percentage * 2 * Math.PI);
 
-        // 3. 畫紅色扇形
         ctx.beginPath();
-        ctx.moveTo(centerX, centerY); // 移動到圓心
-        ctx.arc(centerX, centerY, radius, startAngle, endAngle, false); // false = 順時針
-        ctx.lineTo(centerX, centerY); // 連回圓心
-        ctx.fillStyle = "#ff3b30"; // 紅色
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, radius, startAngle, endAngle, false);
+        ctx.lineTo(centerX, centerY);
+        ctx.fillStyle = "#ff3b30";
         ctx.fill();
     }
 
-    // 數字輸入邏輯
     function addNumber(num) {
         if (isRunning) return;
         if (rawInput.length >= 4) return;
         if (rawInput === "" && num === 0) return;
-
         rawInput += num.toString();
         updateDisplayFromInput();
     }
@@ -306,11 +328,8 @@
         let padded = rawInput.padStart(4, '0');
         let minutes = parseInt(padded.substring(0, 2));
         let seconds = parseInt(padded.substring(2, 4));
-        
         digitalDisplay.innerText = `${padded.substring(0, 2)}:${padded.substring(2, 4)}`;
         totalSeconds = minutes * 60 + seconds;
-        
-        // 更新視覺鐘預覽
         drawVisualClock(totalSeconds);
     }
 
@@ -328,25 +347,24 @@
             isRunning = false;
             startBtn.innerText = "繼續";
             startBtn.style.backgroundColor = "#ff9800";
+            window.speechSynthesis.cancel(); 
         } else {
             if (totalSeconds <= 0) return;
             
+            if (voiceToggle.checked) {
+                window.speechSynthesis.cancel();
+                speak("開始計時"); 
+            }
+
             isRunning = true;
             startBtn.innerText = "暫停";
             startBtn.style.backgroundColor = "#555";
 
-            if (window.speechSynthesis) {
-                window.speechSynthesis.cancel();
-            }
-
             timerInterval = setInterval(() => {
                 if (totalSeconds > 0) {
                     totalSeconds--;
-                    // 更新數字
                     digitalDisplay.innerText = formatTime(totalSeconds);
-                    // 更新視覺
                     drawVisualClock(totalSeconds);
-                    // 檢查語音
                     checkVoiceAnnouncement(totalSeconds);
                 } else {
                     timeUp();
@@ -361,7 +379,7 @@
         rawInput = "";
         totalSeconds = 0;
         digitalDisplay.innerText = "00:00";
-        drawVisualClock(0); // 重置視覺鐘
+        drawVisualClock(0);
         startBtn.innerText = "開始";
         startBtn.style.backgroundColor = "var(--accent-color)";
         window.speechSynthesis.cancel();
@@ -374,7 +392,7 @@
         startBtn.style.backgroundColor = "var(--accent-color)";
         speak("時間到");
         rawInput = "";
-        drawVisualClock(0); // 清空紅色扇形
+        drawVisualClock(0);
     }
 
     function checkVoiceAnnouncement(secondsRemaining) {
@@ -397,8 +415,14 @@
     function speak(text) {
         if ('speechSynthesis' in window) {
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'zh-TW';
+            utterance.lang = 'zh-TW'; 
             utterance.rate = 1;
+            
+            const zhVoices = voices.filter(v => v.lang.includes('zh') || v.lang.includes('TW') || v.lang.includes('HK'));
+            if (zhVoices.length > 0) {
+                utterance.voice = zhVoices[0]; 
+            }
+
             window.speechSynthesis.speak(utterance);
         }
     }
