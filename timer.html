@@ -48,7 +48,6 @@
             position: relative;
         }
 
-        /* 提示訊息：只在 iOS 出現，提醒關閉靜音 */
         .ios-warning {
             color: #ff9800;
             font-size: 0.8rem;
@@ -84,7 +83,6 @@
             margin-bottom: 10px;
         }
 
-        /* 數字時間顯示區 - 強制綠色 */
         .timer-display {
             font-size: 5rem;
             font-weight: bold;
@@ -187,7 +185,7 @@
 <body>
 
 <div class="container">
-    <div id="iosWarning" class="ios-warning">⚠️ 請確認手機側邊「靜音開關」已關閉，並開啟鈴聲音量，否則語音無法播放。</div>
+    <div id="iosWarning" class="ios-warning">⚠️ 請確認手機側邊「靜音開關」已關閉，並開啟鈴聲音量。</div>
 
     <div class="top-bar">
         <button class="mode-btn" onclick="toggleDisplayMode()">切換顯示：數字鐘 / 視覺鐘</button>
@@ -255,30 +253,27 @@
     const centerY = visualCanvas.height / 2;
     const radius = 130;
 
-    // === 語音初始化 ===
+    // === 語音列表 ===
     let voices = [];
     function loadVoices() {
         if ('speechSynthesis' in window) {
             voices = window.speechSynthesis.getVoices();
         }
     }
-
+    
     if ('speechSynthesis' in window) {
         window.speechSynthesis.onvoiceschanged = loadVoices;
         loadVoices();
     }
 
-    // === 強制解鎖 iOS 音效通道 (關鍵修復) ===
+    // === 強制解鎖 iOS 音效通道 ===
     function unlockAudioContext() {
         if (!audioContext) {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
-        
         if (audioContext.state === 'suspended') {
             audioContext.resume();
         }
-
-        // 播放極短無聲波
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
         gainNode.gain.value = 0.01; 
@@ -287,14 +282,11 @@
         oscillator.type = 'sine';
         oscillator.frequency.value = 440; 
         oscillator.start();
-        setTimeout(() => {
-            oscillator.stop();
-        }, 100);
+        setTimeout(() => { oscillator.stop(); }, 100);
     }
 
     drawVisualClock(0);
 
-    // === 顯示模式切換 ===
     function toggleDisplayMode() {
         isVisualMode = !isVisualMode;
         if (isVisualMode) {
@@ -307,7 +299,6 @@
         }
     }
 
-    // === 視覺鐘繪製 ===
     function drawVisualClock(seconds) {
         ctx.clearRect(0, 0, visualCanvas.width, visualCanvas.height);
         ctx.beginPath();
@@ -347,7 +338,6 @@
         ctx.fill();
     }
 
-    // === 數字輸入 ===
     function addNumber(num) {
         if (isRunning) return;
         if (rawInput.length >= 4) return;
@@ -371,34 +361,25 @@
         return `${m}:${s}`;
     }
 
-    // === 計時控制 ===
     function toggleTimer() {
         if (totalSeconds <= 0 && rawInput === "") return;
 
         if (isRunning) {
-            // 暫停
             clearInterval(timerInterval);
             isRunning = false;
             startBtn.innerText = "繼續";
             startBtn.style.backgroundColor = "#ff9800";
             window.speechSynthesis.cancel(); 
         } else {
-            // 開始
             if (totalSeconds <= 0) return;
-            
-            // 1. 強制解鎖 Web Audio
             unlockAudioContext();
-
-            // 2. 觸發語音
             if (voiceToggle.checked) {
                 window.speechSynthesis.cancel();
                 speak("開始計時"); 
             }
-
             isRunning = true;
             startBtn.innerText = "暫停";
             startBtn.style.backgroundColor = "#555";
-
             timerInterval = setInterval(() => {
                 if (totalSeconds > 0) {
                     totalSeconds--;
@@ -436,11 +417,9 @@
 
     function checkVoiceAnnouncement(secondsRemaining) {
         if (!voiceToggle.checked) return;
-
         if (secondsRemaining % 60 === 0 && secondsRemaining > 0) {
             const minutesRemaining = secondsRemaining / 60;
             const intervalSetting = document.querySelector('input[name="voiceInterval"]:checked').value;
-
             if (intervalSetting === "1") {
                 speak(`還剩下 ${minutesRemaining} 分鐘`);
             } else if (intervalSetting === "5") {
@@ -451,24 +430,38 @@
         }
     }
 
-    // === 語音說話核心函式 ===
+    // === 最終修正：鎖定「美佳」語音 (Meijia First Strategy) ===
     function speak(text) {
         if (!('speechSynthesis' in window)) return;
+        if (voices.length === 0) voices = window.speechSynthesis.getVoices();
 
         const utterance = new SpeechSynthesisUtterance(text);
         
-        if (voices.length === 0) voices = window.speechSynthesis.getVoices();
-        const zhVoice = voices.find(v => v.lang.includes('zh') || v.lang.includes('TW'));
-        if (zhVoice) {
-            utterance.voice = zhVoice;
-            utterance.lang = zhVoice.lang;
+        // 1. 第一順位：直接指名找 "Meijia" 或 "美佳" (最精準)
+        let targetVoice = voices.find(v => v.name.includes('Meijia') || v.name.includes('美佳'));
+        
+        // 2. 第二順位：找台灣繁體 (zh-TW)
+        if (!targetVoice) {
+            targetVoice = voices.find(v => v.lang === 'zh-TW');
+        }
+
+        // 3. 第三順位：找任何包含 TW 的中文
+        if (!targetVoice) {
+            targetVoice = voices.find(v => v.lang.includes('zh') && v.lang.includes('TW'));
+        }
+
+        // 應用設定
+        if (targetVoice) {
+            utterance.voice = targetVoice;
+            utterance.lang = targetVoice.lang;
         } else {
+            // 4. 最後手段：找不到美佳也不要亂抓大陸音，直接設定 zh-TW 讓手機自己想辦法
             utterance.lang = 'zh-TW';
+            utterance.voice = null; 
         }
         
         utterance.rate = 1;
         utterance.volume = 1;
-
         window.speechSynthesis.speak(utterance);
     }
 </script>
